@@ -1,5 +1,3 @@
-# nagios
-
 no server - 
     docker run -d -it --name nagiosserver -h nagios -p 8181:80 appcontainers/nagios
     docker container exec -it nagiosserver htpasswd -c -b /etc/nagios/passwd nagiosadmin nagios

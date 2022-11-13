@@ -1,0 +1,26 @@
+version: '3'
+services:
+    nagiosserver:
+        image: appcontainers/nagios
+        container_name: nagiosserver
+        hostname: nagios
+        stdin_open: true # docker run -i
+        tty: true        # docker run -t       
+        ports:
+            - '8181:80'
+        networks:
+            - nagios
+    nagioshost:
+        image: nuagebec/ubuntu
+        container_name: nagioshost
+        hostname: nagioshost
+        stdin_open: true # docker run -i
+        tty: true        # docker run -t       
+        ports:
+            - '2222:22'
+        networks:
+            - nagios
+
+networks:
+    nagios:
+        driver: bridge
