@@ -48,7 +48,9 @@ setTimezone() {
 
     # Check if timezone is set in nagios.cfg
     NAGIOS_CFG="${NAGIOS_HOME}/etc/nagios.cfg"
-    NAGIOS_HTTPD_CFG="/etc/apache2/conf.d/nagios.conf"
+    NAGIOS_HTTPD_CFG="/etc/apache2/sites-available/nagios.conf"
+    # NAGIOS_HTTPD_CFG="/etc/apache2/conf.d/nagios.conf"
+    
 
     TZ_EXIST_NAGIOS_CFG=$(egrep -q "^use_timezone" ${NAGIOS_CFG} ; echo $?)
     TZ_EXIST_APACHE_CFG=$(egrep -q "SetEnv *TZ *" ${NAGIOS_HTTPD_CFG} ; echo $?)

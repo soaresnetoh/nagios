@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:22.04 as builder-base 
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
@@ -30,7 +30,7 @@ RUN apt update && \
     ca-certificates lsb-release apt-transport-https && \
     LC_ALL=C.UTF-8 add-apt-repository ppa:ondrej/php && \
     apt update
-    # mariadb-connector-c
+    # mariadb-plugin-connect
 RUN apt install -y git curl unzip apache2 apache2-utils rsyslog \
                         php7.4-common php7.4-mysql php7.4-xml php7.4-xmlrpc \
                         php7.4-curl php7.4-gd php7.4-imagick php7.4-cli php7.4-dev \
@@ -56,8 +56,11 @@ RUN apt install -y git curl unzip apache2 apache2-utils rsyslog \
     curl -L -o gosu "https://github.com/tianon/gosu/releases/download/1.13/${gosuPlatform}"  && \
     mv gosu /bin/ && \
     chmod 755 /bin/gosu && \
-    chmod +s /bin/gosu && \
-    addgroup -S apache ${NAGIOS_CMDGROUP}
+    chmod +s /bin/gosu
+
+RUN addgroup ${NAGIOS_GROUP} || true && \
+    useradd ${NAGIOS_USER} -g ${NAGIOS_CMDGROUP} -G ${APACHE_GROUP}  || true 
+    
 
 
 # RUN apt update && \
@@ -85,15 +88,30 @@ ARG BUILDPLATFORM
 
 # Add dependencies required to build Nagios
 RUN apt update && \
-    apt install -y --no-cache build-base automake libtool autoconf py-docutils gnutls  \
-                        gnutls-dev g++ make alpine-sdk build-base gcc autoconf \
-                        gettext-dev linux-headers openssl-dev net-snmp net-snmp-tools \
-                        libcrypto1.1 libpq musl libldap libssl1.1 libdbi freeradius-client mariadb-connector-c \
-                        openssh-client bind-tools samba-client fping grep rpcbind \
-                        lm-sensors net-snmp-tools \
-                        file freeradius-client-dev libdbi-dev libpq linux-headers mariadb-dev \
-                        mariadb-connector-c-dev perl \
-                        net-snmp-dev openldap-dev openssl-dev postgresql-dev
+    apt install -y  apache2 build-essential automake libtool autoconf python3-docutils gnutls-bin \
+                        gnutls-dev g++ make gcc autoconf \
+                        gettext linux-headers-generic openssl snmp \
+                        libcrypto++-utils libpq-dev musl-dev libssl-dev libdbi-dev
+RUN apt install -y libfreeradius-dev mariadb-plugin-connect \
+                        openssh-client bind9 bind9utils bind9-doc dnsutils samba-client fping grep rpcbind \
+                        lm-sensors snmp \
+                        file perl \
+                        libldap-dev postgresql-common
+
+# RUN apt install -y git curl unzip apache2 apache2-utils rsyslog \
+#                         php7.4-common php7.4-mysql php7.4-xml php7.4-xmlrpc \
+#                         php7.4-curl php7.4-gd php7.4-imagick php7.4-cli php7.4-dev \
+#                         php7.4-imap php7.4-mbstring php7.4-opcache php7.4-soap php7.4-zip \
+#                         php7.4-intl php7.4 \ 
+#                         runit parallel ssmtp \
+#                         libltdl-dev libintl-perl libssl-dev procps tzdata \
+#                         libldap-dev mariadb-plugin-connect libfreeradius-dev libpq-dev libdbi-dev \
+#                         lm-sensors perl libnet-snmp-perl libsnmp-perl libcrypt-x509-perl \
+#                         libdatetime-perl libwww-perl libtext-glob-perl samba-client openssh-server openssl \
+#                         snmp bind9 bind9utils bind9-doc dnsutils && \
+
+
+
 
 # Download Nagios core, plugins and nrpe sources                        
 RUN    cd /tmp && \
@@ -166,15 +184,18 @@ RUN    echo -e "\n\n =====================\n  Configure NRPE\n =================
                     --with-nagios-user=${NAGIOS_USER} \
                     --with-nagios-group=${NAGIOS_USER} \
                     --with-ssl=/usr/bin/openssl \
-                    --with-ssl-lib=/usr/lib && \
-       echo "NRPE client configured: OK" && \
+                    --with-ssl-lib=/usr/lib
+RUN  echo "NRPE client configured: OK" && \
        echo -e "\n\n ===========================\n  Compile NRPE\n ===========================\n" && \
-       # make all && \
-       make check_nrpe                                                          && \
-       echo "NRPE compiled successfully: OK" && \
-       echo -e "\n\n ===========================\n  Install NRPE\n ===========================\n" && \
+       find / -iname "*check_nrpe*"
+# RUN    cd /tmp/nrpe-nrpe-4.0.3/src/ && make check_nrpe
+WORKDIR /tmp/nrpe-nrpe-4.0.3/
+RUN    cd src && make check_nrpe
+RUN    echo "NRPE compiled successfully: OK" && \
+       echo -e "\n\n ===========================\n  Install NRPE\n ===========================\n"
        # make install && \
-       cp src/check_nrpe ${NAGIOS_HOME}/libexec/                                && \
+       
+RUN    cp src/check_nrpe ${NAGIOS_HOME}/libexec/ && \
        echo "NRPE installed successfully: OK" && \
        echo -n "Final Nagios installed size: " && \
        du -h -s ${NAGIOS_HOME} 
@@ -182,13 +203,13 @@ RUN    echo -e "\n\n =====================\n  Configure NRPE\n =================
 # Compile Nagios files
 # Create SSMTP configuration
 
-
+RUN ls /etc/apache2
 # RUN sed -i.bak 's/.*\=www\-data//g' /etc/apache2/envvars
 RUN export DOC_ROOT="DocumentRoot $(echo $NAGIOS_HOME/share)"                                        && \
-    sed -i "s,DocumentRoot.*,$DOC_ROOT," /etc/apache2/httpd.conf                                     && \
-    sed -i "s|^ *ScriptAlias.*$|ScriptAlias /cgi-bin $NAGIOS_HOME/sbin|g" /etc/apache2/httpd.conf    && \
-    sed -i 's/^\(.*\)#\(LoadModule cgi_module\)\(.*\)/\1\2\3/' /etc/apache2/httpd.conf               && \
-    echo "ServerName ${NAGIOS_FQDN}" >> /etc/apache2/httpd.conf
+    sed -i "s,DocumentRoot.*,$DOC_ROOT," /etc/apache2/apache2.conf                                     && \
+    sed -i "s|^ *ScriptAlias.*$|ScriptAlias /cgi-bin $NAGIOS_HOME/sbin|g" /etc/apache2/apache2.conf    && \
+    sed -i 's/^\(.*\)#\(LoadModule cgi_module\)\(.*\)/\1\2\3/' /etc/apache2/apache2.conf               && \
+    echo "ServerName ${NAGIOS_FQDN}" >> /etc/apache2/apache2.conf
 
 RUN sed -i 's,/bin/mail,/usr/bin/mail,' ${NAGIOS_HOME}/etc/objects/commands.cfg  && \
     sed -i 's,/usr/usr,/usr,'           ${NAGIOS_HOME}/etc/objects/commands.cfg  && \
@@ -250,10 +271,10 @@ RUN chmod +x /usr/local/bin/start_nagios                 \
             : '# Copy Apache configuration'           && \
             cp -Rp /orig/apache2/* /etc/apache2       && \
             : '# Convert files to Unix format'        && \
-            dos2unix /etc/rsyslog.conf                && \
-            dos2unix /usr/local/bin/start_nagios      && \
-            dos2unix /etc/sv/**/run                   && \
-            dos2unix /etc/ssmtp/ssmtp.conf            && \
+            # dos2unix /etc/rsyslog.conf                && \
+            # dos2unix /usr/local/bin/start_nagios      && \
+            # dos2unix /etc/sv/**/run                   && \
+            # dos2unix /etc/ssmtp/ssmtp.conf            && \
             : '# Add mail symbolic links to ssmtp'   && \
             ln -s $(which ssmtp) /bin/mail            && \
             ln -s $(which ssmtp) /usr/sbin/mail
